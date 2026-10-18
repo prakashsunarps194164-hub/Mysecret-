@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Simple Pong</title>
+  <style>
+    :root{--bg:#0b1220;--panel:#0f1724;--accent:#60a5fa;--text:#e6eef8}
+    html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, Helvetica, Arial}
+    body{display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#061024 0%, #081227 60%);color:var(--text)}
+    .wrap{width:900px;max-width:95%;padding:18px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,0.6)}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    h1{font-size:20px;margin:0;color:var(--accent)}
+    .scoreboard{display:flex;gap:12px;align-items:center}
+    .score{background:var(--panel);padding:8px 14px;border-radius:8px;font-weight:700;display:flex;flex-direction:column;align-items:center}
+    .score small{font-size:12px;color:#9fb4d9;font-weight:500}
+    canvas{background:#071028;display:block;border-radius:6px;margin:0 auto;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.02)}
+    .controls{display:flex;gap:8px;align-items:center;margin-top:10px}
+    button{background:var(--accent);border:none;color:#06203a;padding:8px 12px;border-radius:8px;font-weight:700;cursor:pointer}
+    .hint{color:#9fb4d9;font-size:13px}
+    footer{margin-top:10px;color:#88a7d6;font-size:13px}
+    @media (max-width:520px){h1{font-size:16px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Simple Pong</h1>
+      <div class="scoreboard">
+        <div class="score">
+          <span id="leftScore">0</span>
+          <small>Player</small>
+        </div>
+        <div style="color:#9fb4d9">—</div>
+        <div class="score">
+          <span id="rightScore">0</span>
+          <small>Computer</small>
+        </div>
+      </div>
+    </header>
+
+    <canvas id="game" width="800" height="500"></canvas>
+
+    <div class="controls">
+      <button id="startBtn">Start</button>
+      <button id="pauseBtn">Pause</button>
+      <button id="resetBtn">Reset</button>
+      <div class="hint" style="margin-left:12px">Control left paddle with mouse or Up/Down arrow keys</div>
+    </div>
+    <footer>Ball bounces off walls and paddles. First to 7 wins. Collision detection and simple AI included.</footer>
+  </div>
+
+  <script>
+    // Canvas setup
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    // Game state
+    let running = false;
+    let rafId = null;
+
+    // Scores
+    const leftScoreEl = document.getElementById('leftScore');
+    const rightScoreEl = document.getElementById('rightScore');
+    let leftScore = 0;
+    let rightScore = 0;
+    const WIN_SCORE = 7;
+
+    // Paddles
+    const PADDLE_WIDTH = 12;
+    const PADDLE_HEIGHT = 90;
+    const PADDLE_SPEED = 6.5; // used for keyboard movement
+
+    const leftPaddle = { x: 20, y: (H - PADDLE_HEIGHT) / 2, w: PADDLE_WIDTH, h: PADDLE_HEIGHT, vy: 0 };
+    const rightPaddle = { x: W - 20 - PADDLE_WIDTH, y: (H - PADDLE_HEIGHT) / 2, w: PADDLE_WIDTH, h: PADDLE_HEIGHT, vy: 0 };
+
+    // Ball
+    const BALL_RADIUS = 9;
+    const BALL_SPEED = 5.5;
+    let ball = createBall(1); // direction 1 means to the right initially
+
+    function createBall(direction){
+      // direction: 1 => to the right, -1 => to the left
+      const angle = (Math.random() * Math.PI / 4) - (Math.PI / 8); // -22.5deg .. 22.5deg
+      const speed = BALL_SPEED;
+      return {
+        x: W/2,
+        y: H/2,
+        vx: Math.cos(angle) * speed * direction,
+        vy: Math.sin(angle) * speed
+      };
+    }
+
+    // Input handling
+    const keys = { ArrowUp:false, ArrowDown:false };
+
+    window.addEventListener('keydown', e => {
+      if(e.code === 'ArrowUp' || e.code === 'ArrowDown'){
+        keys[e.code] = true;
+        e.preventDefault();
+      }
+    });
+    window.addEventListener('keyup', e => {
+      if(e.code === 'ArrowUp' || e.code === 'ArrowDown'){
+        keys[e.code] = false;
+        e.preventDefault();
+      }
+    });
+
+    // Mouse control: map mouse y on canvas to paddle center
+    canvas.addEventListener('mousemove', e => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleY = canvas.height / rect.height;
+      const mouseY = (e.clientY - rect.top) * scaleY;
+      // center the paddle on mouse
+      leftPaddle.y = clamp(mouseY - leftPaddle.h/2, 0, H - leftPaddle.h);
+    });
+
+    // Utility
+    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+    // Collision detection for ball vs rectangle
+    function rectCircleColliding(circle, rect){
+      const distX = Math.abs(circle.x - (rect.x + rect.w/2));
+      const distY = Math.abs(circle.y - (rect.y + rect.h/2));
+
+      if(distX > (rect.w/2 + BALL_RADIUS)) return false;
+      if(distY > (rect.h/2 + BALL_RADIUS)) return false;
+
+      if(distX <= (rect.w/2)) return true;
+      if(distY <= (rect.h/2)) return true;
+
+      const dx = distX - rect.w/2;
+      const dy = distY - rect.h/2;
+      return (dx*dx + dy*dy <= (BALL_RADIUS*BALL_RADIUS));
+    }
+
+    // Game update
+    function update(){
+      // Keyboard control overrides small increments
+      if(keys.ArrowUp) leftPaddle.y -= PADDLE_SPEED;
+      if(keys.ArrowDown) leftPaddle.y += PADDLE_SPEED;
+      leftPaddle.y = clamp(leftPaddle.y, 0, H - leftPaddle.h);
+
+      // Simple AI for right paddle
+      const aiCenter = rightPaddle.y + rightPaddle.h/2;
+      const diff = ball.y - aiCenter;
+      const aiSpeed = 5.0; // max speed for the computer paddle
+      if(Math.abs(diff) > 6){
+        rightPaddle.y += clamp(diff, -aiSpeed, aiSpeed);
+      }
+      rightPaddle.y = clamp(rightPaddle.y, 0, H - rightPaddle.h);
+
+      // Move ball
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      // Top/bottom wall collisions
+      if(ball.y - BALL_RADIUS <= 0){ ball.y = BALL_RADIUS; ball.vy *= -1; }
+      if(ball.y + BALL_RADIUS >= H){ ball.y = H - BALL_RADIUS; ball.vy *= -1; }
+
+      // Paddle collisions
+      const ballObj = { x: ball.x, y: ball.y };
+      if(rectCircleColliding(ballObj, leftPaddle)){
+        // move ball outside paddle to avoid sticking
+        ball.x = leftPaddle.x + leftPaddle.w + BALL_RADIUS;
+        // reflect X and add spin based on where it hit the paddle
+        reflectBallFromPaddle(leftPaddle);
+      }
+      if(rectCircleColliding(ballObj, rightPaddle)){
+        ball.x = rightPaddle.x - BALL_RADIUS;
+        reflectBallFromPaddle(rightPaddle, true);
+      }
+
+      // Score conditions
+      if(ball.x < -BALL_RADIUS){ // computer scores
+        rightScore++;
+        rightScoreEl.textContent = rightScore;
+        checkWin();
+        resetAfterScore(-1);
+      }
+      if(ball.x > W + BALL_RADIUS){ // player scores
+        leftScore++;
+        leftScoreEl.textContent = leftScore;
+        checkWin();
+        resetAfterScore(1);
+      }
+    }
+
+    function reflectBallFromPaddle(paddle, invertDirection=false){
+      // Determine hit position relative to paddle center (-1 .. 1)
+      const relativeIntersectY = (paddle.y + paddle.h/2) - ball.y;
+      const normalizedRelative = (relativeIntersectY / (paddle.h/2));
+      // max bounce angle: 75 degrees
+      const maxBounce = (75 * Math.PI) / 180;
+      const bounceAngle = normalizedRelative * maxBounce;
+
+      // Speed magnitude increases slightly each hit, capped
+      const speed = Math.min(Math.hypot(ball.vx, ball.vy) * 1.05, 12);
+
+      const dir = (paddle === leftPaddle) ? 1 : -1;
+
+      ball.vx = Math.cos(bounceAngle) * speed * dir;
+      ball.vy = Math.sin(bounceAngle) * -1 * speed; // negative because we inverted the relative sign
+
+      // small nudge so it doesn't re-collide instantly
+      ball.x += ball.vx * 0.5;
+      ball.y += ball.vy * 0.5;
+    }
+
+    function resetAfterScore(direction){
+      // direction: 1 => ball goes right (player scored), -1 => ball goes left
+      ball = createBall(direction);
+      // pause briefly before continuing
+      running = false;
+      cancelAnimationFrame(rafId);
+      setTimeout(()=>{ if(leftScore < WIN_SCORE && rightScore < WIN_SCORE){ running = true; loop(); } }, 700);
+    }
+
+    function checkWin(){
+      if(leftScore >= WIN_SCORE || rightScore >= WIN_SCORE){
+        running = false;
+        cancelAnimationFrame(rafId);
+        setTimeout(()=>{
+          const winner = leftScore > rightScore ? 'Player' : 'Computer';
+          alert(winner + ' wins!');
+        }, 100);
+      }
+    }
+
+    // Drawing
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+
+      // center dashed line
+      ctx.fillStyle = '#0b1726';
+      ctx.fillRect(0,0,W,H);
+
+      ctx.strokeStyle = '#1e3a8a';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([12, 10]);
+      ctx.beginPath();
+      ctx.moveTo(W/2, 0);
+      ctx.lineTo(W/2, H);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // paddles
+      ctx.fillStyle = '#60a5fa';
+      roundRect(ctx, leftPaddle.x, leftPaddle.y, leftPaddle.w, leftPaddle.h, 6, true, false);
+      ctx.fillStyle = '#60a5fa';
+      roundRect(ctx, rightPaddle.x, rightPaddle.y, rightPaddle.w, rightPaddle.h, 6, true, false);
+
+      // ball
+      ctx.fillStyle = '#fef3c7';
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI*2);
+      ctx.fill();
+
+      // glow
+      const g = ctx.createRadialGradient(ball.x, ball.y, 0, ball.x, ball.y, 40);
+      g.addColorStop(0, 'rgba(250,240,200,0.35)');
+      g.addColorStop(1, 'rgba(250,240,200,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, 40, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    function roundRect(ctx, x, y, w, h, r){
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Game loop
+    function loop(){
+      update();
+      draw();
+      if(running) rafId = requestAnimationFrame(loop);
+    }
+
+    // Buttons
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    startBtn.addEventListener('click', ()=>{
+      if(!running){ running = true; loop(); }
+    });
+    pauseBtn.addEventListener('click', ()=>{
+      running = !running;
+      if(running) loop(); else cancelAnimationFrame(rafId);
+    });
+    resetBtn.addEventListener('click', ()=>{
+      leftScore = 0; rightScore = 0; leftScoreEl.textContent = 0; rightScoreEl.textContent = 0;
+      leftPaddle.y = (H - PADDLE_HEIGHT)/2; rightPaddle.y = (H - PADDLE_HEIGHT)/2; ball = createBall(Math.random() > 0.5 ? 1 : -1);
+      running = false; cancelAnimationFrame(rafId);
+    });
+
+    // Start automatically
+    draw();
+
+    // Make canvas resize-friendly without changing game coordinates: center it using CSS only (we keep fixed logical resolution)
+
+    // Prevent page scroll when using arrows
+    window.addEventListener('keydown', function(e){ if(['ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault(); });
+
+  </script>
+</body>
+</html>
