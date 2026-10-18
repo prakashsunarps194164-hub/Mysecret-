@@ -18,8 +18,7 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;}
-        .container {
-            width: 100%;
+        .container {width: 100%;
             max-width: 450px;
             background: var(--card-bg);
             padding: 30px;
@@ -29,10 +28,8 @@
         h2 {margin-bottom: 20px;
             color: #818cf8;}
         .input-group {margin-bottom: 15px;
-            text-align: left;
-        }
-        label {
-            display: block;
+            text-align: left;}
+        label {display: block;
             margin-bottom: 5px;
             font-size: 14px;
             color:#cbd5e1;}
@@ -43,10 +40,8 @@
             border-radius: 8px;
             background: #0f172a;
             color: #fff;
-            box-sizing: border-box;
-        }
-        button {
-            width: 100%;
+            box-sizing: border-box;}
+        button {width: 100%;
             padding: 12px;
             background: var(--primary-color);
             border: none;
@@ -68,8 +63,7 @@
 </head>
 <body>
 /* समग्र बडीको लागि स्टाइल */
-body {
-    font-family: Arial, sans-serif;
+body {font-family: Arial, sans-serif;
     background-color: #f4f6f9;
     color: #333333;
     margin: 0;
@@ -78,16 +72,13 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
-}
+    min-height: 100vh}
 
 /* मुख्य शीर्षक (Heading) को लागि */
-h1 {
-    color: #2c3e50;
+h1 {color: #2c3e50;
     font-size: 2.5rem;
     margin-bottom: 10px;
-    text-align: center;
-}
+    text-align: center;}
 
 /* प्याराग्राफको लागि स्टाइल */
 p{font-size: 1.1rem;
@@ -133,11 +124,11 @@ p{font-size: 1.1rem;
       {event.preventDefault(9);
             // साधारण डेमोको लागि लगइन सफल भएपछि ड्यासबोर्ड देखाउने
             document.getElementById('auth-container').style.display = 'actractive';
-            document.getElementById('dashboard-container').style.display = 'block';
-        }
+            document.getElementById('dashboard-container').style.display = 'block';}
 
-        function handleLogout() {
-            document.getElementById('dashboard-container').style.display = 'none';
+        function handleLogout(9) 
+
+            {document.getElementById('dashboard-container').style.display = 'none';
             document.getElementById('auth-container').style.display = 'block'}
     </script>
 
